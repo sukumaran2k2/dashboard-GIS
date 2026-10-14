@@ -1,0 +1,119 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GeoDash</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/vendor/leaflet.css">
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1f2933;--mu:#6b7785;--bd:#e1e5ea;--pr:#2c3e50;--ac:#3498db;--dg:#d9534f;--sb:#222d38}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--tx);display:flex;height:100vh}
+#side{width:220px;background:var(--sb);color:#cfd8e0;display:flex;flex-direction:column;flex:none}
+#side h1{margin:0;padding:18px;font-size:18px;color:#fff;border-bottom:1px solid #34414e}#side h1 span{color:var(--ac)}
+#side a{padding:12px 18px;cursor:pointer;display:block}#side a:hover,#side a.on{background:#2e3c4a;color:#fff;border-left:3px solid var(--ac)}
+#stor{margin-top:auto;padding:16px;font-size:12px}.bar{height:6px;background:#3a4856;border-radius:3px;margin:6px 0}.bar i{display:block;height:100%;background:var(--ac);border-radius:3px}
+main{flex:1;overflow:auto;padding:24px;position:relative}h2{margin:0 0 16px;font-weight:600}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}.sp{flex:1}
+button,.btn{background:var(--ac);color:#fff;border:0;border-radius:4px;padding:7px 13px;cursor:pointer;font-size:13px}button.sec{background:#fff;color:var(--tx);border:1px solid var(--bd)}button.dg{background:var(--dg)}button:hover{filter:brightness(.95)}
+input,select{padding:7px 10px;border:1px solid var(--bd);border-radius:4px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:16px}.pc{cursor:pointer}.pc:hover{box-shadow:0 2px 8px #0002}.pc h3{margin:0 0 6px}.mu{color:var(--mu);font-size:12px}
+.stat{font-size:26px;font-weight:600}table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--bd);border-radius:6px}th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--bd)}th{font-size:12px;color:var(--mu);text-transform:uppercase}
+.tag{font-size:11px;padding:2px 7px;border-radius:9px;background:#e8f1f8;color:#2471a3}
+#drop{border:2px dashed #b8c2cc;border-radius:8px;padding:28px;text-align:center;background:#fff;color:var(--mu);margin-bottom:12px}#drop.over{border-color:var(--ac);background:#eaf4fc}
+.up{background:#fff;border:1px solid var(--bd);border-radius:4px;padding:8px 12px;margin-bottom:6px}.up .bar{background:#e1e5ea}.err{color:var(--dg)}.ok{color:#2e9d5b}
+#mapview{position:fixed;inset:0 0 0 220px;display:flex;background:#fff;z-index:500}#lp{width:300px;border-right:1px solid var(--bd);overflow:auto;padding:12px;background:#fafbfc;flex:none}#mc{flex:1;display:flex;flex-direction:column}#top button{white-space:nowrap}#top{padding:8px 12px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--bd)}#map{flex:1}
+.ly{background:#fff;border:1px solid var(--bd);border-radius:4px;padding:8px;margin-bottom:8px}.ly b{word-break:break-all}.ly .r{display:flex;gap:4px;align-items:center;margin-top:4px;flex-wrap:wrap}.ly .r input[type=range]{min-width:90px}.ly button{padding:2px 7px}
+.grad{height:10px;width:100%;background:linear-gradient(90deg,#2b83ba,#64b478,#e6dc78,#aa6e46,#f5f5f5);border-radius:2px}.lg{display:flex;justify-content:space-between;font-size:11px}
+.modal{position:fixed;inset:0;background:#0007;z-index:2000;display:flex;align-items:center;justify-content:center}.modal>div{background:#fff;border-radius:8px;padding:20px;max-width:760px;width:92%;max-height:88vh;overflow:auto}
+dl{display:grid;grid-template-columns:150px 1fr;gap:4px 10px;margin:0}dt{color:var(--mu)}dd{margin:0;word-break:break-all}
+#toast{position:fixed;bottom:20px;right:20px;z-index:3000;background:#333;color:#fff;padding:10px 16px;border-radius:4px;display:none}
+</style></head><body>
+<div id="side"><h1>Geo<span>Dash</span></h1><a data-v="dash">Dashboard</a><a data-v="projects">Projects</a><a data-v="library">Dataset Library</a><div id="stor"></div></div>
+<main id="main"></main><div id="toast"></div>
+<script src="/vendor/leaflet.js"></script>
+<script src="/vendor/three.min.js"></script>
+<script>
+const $=(s,e=document)=>e.querySelector(s),M=$('#main');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=b=>{let u=['B','KB','MB','GB','TB'],i=0;while(b>=1024&&i<4){b/=1024;i++}return b.toFixed(i?1:0)+' '+u[i]};
+const fd=t=>new Date(t*1000).toLocaleString();
+function toast(m,err){const t=$('#toast');t.textContent=m;t.style.background=err?'#c0392b':'#333';t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',4000)}
+async function api(u,o={}){if(o.json){o.body=JSON.stringify(o.json);o.headers={'Content-Type':'application/json'}}
+ const r=await fetch(u,o);if(!r.ok){let m=r.statusText;try{m=(await r.json()).detail||m}catch{}throw new Error(m)}return r.json()}
+const KIND={raster:'Raster',dem:'DEM / DSM',vector:'Shapefile',pointcloud:'Point cloud'};
+let state={view:'dash',pid:null,map:null};
+function nav(v,pid){destroyMap();state.view=v;state.pid=pid||null;document.querySelectorAll('#side a').forEach(a=>a.classList.toggle('on',a.dataset.v==(v=='project'?'projects':v)));({dash,projects,library,project})[v]();sidebar()}
+document.querySelectorAll('#side a').forEach(a=>a.onclick=()=>nav(a.dataset.v));
+async function sidebar(){const s=await api('/api/storage');$('#stor').innerHTML=`Storage used<div class="bar"><i style="width:${Math.max(1,s.used/s.disk_total*100)}%"></i></div>${fmt(s.used)} of ${fmt(s.disk_total)} disk<br>${fmt(s.disk_free)} free`}
+function search(ph,val,fn){return `<input id="q" placeholder="${ph}" value="${esc(val)}" oninput="${fn}(this.value)">`}
+async function dash(){const [p,d,s]=await Promise.all([api('/api/projects'),api('/api/datasets'),api('/api/storage')]);
+ M.innerHTML=`<h2>Dashboard</h2><div class="grid" style="margin-bottom:24px"><div class="card"><div class="stat">${p.length}</div>Projects</div><div class="card"><div class="stat">${d.length}</div>Datasets</div><div class="card"><div class="stat">${fmt(s.used)}</div>Data stored</div><div class="card"><div class="stat">${fmt(s.disk_free)}</div>Disk free</div></div>
+ <div class="row"><h3 style="margin:0">Recent projects</h3><span class="sp"></span><button onclick="newProject()">+ New project</button></div><div class="grid">${p.slice(0,6).map(pcard).join('')||'<p class="mu">No projects yet. Create one to start uploading data.</p>'}</div>`}
+const pcard=p=>`<div class="card pc" onclick="nav('project','${p.id}')"><h3>${esc(p.name)}</h3><div class="mu">${p.datasets} dataset${p.datasets==1?'':'s'} · ${fmt(p.size)}<br>Created ${fd(p.created)}</div></div>`;
+async function projects(){const p=await api('/api/projects');
+ M.innerHTML=`<div class="row"><h2 style="margin:0">Projects</h2><span class="sp"></span><input id="pq" placeholder="Search projects…" oninput="document.querySelectorAll('.pc').forEach(c=>c.style.display=c.textContent.toLowerCase().includes(this.value.toLowerCase())?'':'none')"><button onclick="newProject()">+ New project</button></div><div class="grid">${p.map(pcard).join('')||'<p class="mu">No projects yet.</p>'}</div>`}
+async function newProject(){const n=prompt('Project name');if(n===null)return;try{const p=await api('/api/projects',{method:'POST',json:{name:n}});nav('project',p.id)}catch(e){toast(e.message,1)}}
+let libT;function libSearch(v){clearTimeout(libT);libT=setTimeout(()=>library(v,true),200)}
+async function library(q='',keep){const d=await api('/api/datasets?q='+encodeURIComponent(q));
+ const html=dtable(d,true);if(keep){$('#lt').innerHTML=html;return}
+ M.innerHTML=`<div class="row"><h2 style="margin:0">Dataset Library</h2><span class="sp"></span>${search('Search datasets…',q,'libSearch')}</div><div id="lt">${html}</div>`}
+function dtable(d,showProj){if(!d.length)return '<p class="mu">No datasets found.</p>';
+ return `<table><tr><th>Name</th><th>Type</th>${showProj?'<th>Project</th>':''}<th>Size</th><th>CRS</th><th>Uploaded</th><th></th></tr>${d.map(x=>`<tr><td><b>${esc(x.filename)}</b></td><td><span class="tag">${KIND[x.kind]}</span></td>${showProj?`<td>${esc(x.project_name)}</td>`:''}<td>${fmt(x.size)}</td><td>${esc(x.meta.epsg?'EPSG:'+x.meta.epsg:x.meta.crs||'—')}</td><td>${fd(x.created)}</td><td style="white-space:nowrap"><button onclick="openMap('${x.project_id}','${x.id}')">Map</button> <button class="sec" onclick="info('${x.id}')">Info</button> <a class="btn sec" style="text-decoration:none;color:inherit;border:1px solid var(--bd)" href="/api/datasets/${x.id}/download">Download</a> <button class="dg" onclick="delDs('${x.id}')">Delete</button></td></tr>`).join('')}</table>`}
+async function delDs(id){if(!confirm('Delete this dataset and its files permanently?'))return;try{await api('/api/datasets/'+id,{method:'DELETE'});toast('Deleted');nav(state.view,state.pid)}catch(e){toast(e.message,1)}}
+async function info(id){const d=(await api('/api/datasets')).find(x=>x.id==id),m=d.meta;let rows=[['Filename',d.filename],['Format',KIND[d.kind]],['File size',fmt(d.size)],['CRS',m.crs||'Unknown'],['EPSG',m.epsg||'—'],['Extent (WGS84 W,S,E,N)',m.bounds?m.bounds.map(v=>v.toFixed(6)).join(', '):'—']];
+ if(d.kind=='raster'||d.kind=='dem')rows.push(['Dimensions',`${m.width} × ${m.height} px`],['Bands',m.bands],['Data type',m.dtype],['Pixel size',m.resolution.map(v=>v.toPrecision(5)).join(' × ')],['NoData',m.nodata??'—'],['Overviews',m.overviews],['Internally tiled',m.tiled?'yes':'no (COG conversion recommended for very large files)']);
+ if(d.kind=='vector')rows.push(['Geometry',m.geometry_type],['Features',m.features]);
+ if(d.kind=='pointcloud')rows.push(['Points',m.points.toLocaleString()],['Points in 3D preview',m.preview_points.toLocaleString()],['LAS version',m.version],['Point format',m.point_format],['Has RGB',m.has_rgb?'yes':'no (colored by height)'],['Min XYZ',m.mins.map(v=>v.toFixed(2))],['Max XYZ',m.maxs.map(v=>v.toFixed(2))]);
+ let extra='';if(m.warnings&&m.warnings.length)extra+=`<p class="err">${m.warnings.map(esc).join('<br>')}</p>`;
+ if(d.kind=='vector'){const g=await api(`/api/datasets/${id}/geojson`),f=g.features.slice(0,50);extra+=`<h4>Attributes (first ${f.length} of ${m.features})</h4><div style="overflow:auto;max-height:260px"><table><tr>${m.fields.map(k=>`<th>${esc(k)}</th>`).join('')}</tr>${f.map(x=>`<tr>${m.fields.map(k=>`<td>${esc(x.properties[k])}</td>`).join('')}</tr>`).join('')}</table></div>`}
+ modal(`<h3>${esc(d.filename)}</h3><dl>${rows.map(r=>`<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join('')}</dl>${extra}`)}
+function modal(h,cb){const m=document.createElement('div');m.className='modal';m.innerHTML=`<div>${h}<p style="text-align:right"><button class="sec" id="mx">Close</button></p></div>`;document.body.appendChild(m);const close=()=>{m.remove();cb&&cb()};$('#mx',m).onclick=close;m.onclick=e=>{if(e.target==m)close()};return m}
+// ---- project view + upload ----
+async function project(){const id=state.pid,ps=await api('/api/projects'),p=ps.find(x=>x.id==id);if(!p)return nav('projects');const d=await api('/api/datasets?project='+id);
+ M.innerHTML=`<div class="row"><h2 style="margin:0">${esc(p.name)}</h2><span class="sp"></span><button class="sec" onclick="renameP()">Rename</button><button id="om" onclick="openMap('${id}')" ${d.length?'':'disabled'}>Open map</button><button class="dg" onclick="delP()">Delete project</button></div>
+ <div id="drop">Drag & drop files here or <a href="#" id="pick">browse</a><br><span class="mu">GeoTIFF (.tif/.tiff, incl. DEM/DSM) · Shapefile (.zip with .shp .shx .dbf .prj) · LAS/LAZ</span><input type="file" id="fi" multiple hidden accept=".tif,.tiff,.zip,.las,.laz"></div><div id="ups"></div><h3>Datasets</h3><div id="dt">${dtable(d,false)}</div>`;
+ const dz=$('#drop');$('#pick').onclick=e=>{e.preventDefault();$('#fi').click()};$('#fi').onchange=e=>uploadAll([...e.target.files]);
+ dz.ondragover=e=>{e.preventDefault();dz.classList.add('over')};dz.ondragleave=()=>dz.classList.remove('over');dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');uploadAll([...e.dataTransfer.files])}}
+async function renameP(){const n=prompt('New project name');if(n===null)return;try{await api('/api/projects/'+state.pid,{method:'PATCH',json:{name:n}});project()}catch(e){toast(e.message,1)}}
+async function delP(){if(!confirm('Delete this project and ALL its datasets permanently?'))return;await api('/api/projects/'+state.pid,{method:'DELETE'});nav('projects')}
+function uploadAll(files){const pid=state.pid;Promise.all(files.map(f=>upOne(pid,f))).then(async()=>{if(state.pid==pid&&state.view=='project'){const nd=await api('/api/datasets?project='+pid);$('#dt').innerHTML=dtable(nd,false);$('#om').disabled=!nd.length}sidebar()})}
+function upOne(pid,f){return new Promise(res=>{const el=document.createElement('div');el.className='up';el.innerHTML=`<b>${esc(f.name)}</b> <span class="mu">${fmt(f.size)}</span><div class="bar"><i style="width:0"></i></div><span class="st mu">Uploading…</span>`;$('#ups').prepend(el);
+ const x=new XMLHttpRequest(),fm=new FormData();fm.append('file',f);x.open('POST',`/api/projects/${pid}/upload`);
+ x.upload.onprogress=e=>{if(e.lengthComputable){const p=e.loaded/e.total*100;$('i',el).style.width=p+'%';$('.st',el).textContent=p<100?`Uploading ${p.toFixed(0)}%`:'Validating file…'}};
+ x.onload=()=>{const st=$('.st',el);if(x.status==200){st.className='st ok';st.textContent='✓ Uploaded and validated'}else{let m='Upload failed';try{m=JSON.parse(x.responseText).detail}catch{}st.className='st err';st.textContent='✗ '+m;$('i',el).style.background='#d9534f'}res()};
+ x.onerror=()=>{$('.st',el).className='st err';$('.st',el).textContent='✗ Network error';res()};x.send(fm)})}
+// ---- map viewer ----
+const BASES={'OpenStreetMap':['https://tile.openstreetmap.org/{z}/{x}/{y}.png','© OpenStreetMap'],'Satellite (Esri)':['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}','© Esri'],'Light (CARTO)':['https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png','© CARTO'],'None':null};
+let LY=[];function destroyMap(){if(state.map){state.map.remove();state.map=null}$('#mapview')?.remove();LY=[]}
+async function openMap(pid,focus){destroyMap();const ds=await api('/api/datasets?project='+pid),ps=await api('/api/projects'),p=ps.find(x=>x.id==pid);
+ const v=document.createElement('div');v.id='mapview';v.innerHTML=`<div id="lp"><h4 style="margin:0 0 8px">Layers</h4><div id="ll"></div><div id="leg"></div></div><div id="mc"><div id="top"><button class="sec" id="back">← Back</button><b>${esc(p?.name)}</b><span class="sp"></span>Basemap <select id="bm">${Object.keys(BASES).map(k=>`<option>${k}</option>`).join('')}</select></div><div id="map"></div></div>`;document.body.appendChild(v);
+ $('#back').onclick=()=>nav('project',pid);const map=state.map=L.map('map',{zoomControl:true,maxZoom:22}).setView([20,0],2);let base;
+ $('#bm').onchange=e=>{base&&map.removeLayer(base);const b=BASES[e.target.value];if(b){base=L.tileLayer(b[0],{attribution:b[1],maxZoom:22,maxNativeZoom:19,pane:'tilePane'}).addTo(map);base.setZIndex(0)}};$('#bm').value='OpenStreetMap';$('#bm').onchange({target:$('#bm')});
+ for(const d of ds){const l={d,on:!focus||focus==d.id,op:1,pane:'p'+d.id,layer:null};map.createPane(l.pane);LY.push(l);if(d.meta.bounds||d.kind=='pointcloud')await mk(l)}
+ renderLayers();const f=LY.find(l=>l.d.id==focus)||LY.find(l=>l.on&&l.layer);f?zoom(f):0}
+async function mk(l){const d=l.d,map=state.map;if(d.kind=='pointcloud'){if(!d.meta.bounds)return;const b=d.meta.bounds;l.layer=L.rectangle([[b[1],b[0]],[b[3],b[2]]],{pane:l.pane,color:'#e67e22',weight:2,fillOpacity:.1})}
+ else if(d.kind=='vector'){const g=await api(`/api/datasets/${d.id}/geojson`);l.layer=L.geoJSON(g,{pane:l.pane,style:{color:'#e74c3c',weight:2,fillOpacity:.25},pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5,pane:l.pane,color:'#c0392b',fillOpacity:.7}),onEachFeature:(f,ly)=>ly.bindPopup('<table>'+Object.entries(f.properties).map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join('')+'</table>')})}
+ else l.layer=L.tileLayer(`/api/datasets/${d.id}/tiles/{z}/{x}/{y}.png`,{pane:l.pane,maxZoom:22,maxNativeZoom:18,bounds:L.latLngBounds([d.meta.bounds[1],d.meta.bounds[0]],[d.meta.bounds[3],d.meta.bounds[2]])});
+ apply(l)}
+function apply(l){if(!l.layer)return;const map=state.map;l.on?l.layer.addTo(map):map.removeLayer(l.layer);const o=l.op;if(l.layer.setOpacity)l.layer.setOpacity(o);else l.layer.setStyle&&l.layer.setStyle({opacity:o,fillOpacity:o*.25});LY.forEach((x,i)=>map.getPane(x.pane).style.zIndex=300+(LY.length-i))}
+function zoom(l){const b=l.d.meta.bounds;if(b)state.map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{maxZoom:19})}
+function renderLayers(){$('#ll').innerHTML=LY.map((l,i)=>`<div class="ly"><label><input type="checkbox" ${l.on?'checked':''} ${l.layer?'':'disabled'} data-a="t" data-i="${i}"> <b>${esc(l.d.filename)}</b></label><div class="mu">${KIND[l.d.kind]}${l.layer?'':' — not georeferenced, 3D only'}</div><div class="r"><input type="range" min="0" max="1" step=".05" value="${l.op}" data-a="o" data-i="${i}" style="flex:1" title="Opacity"><button class="sec" data-a="u" data-i="${i}">↑</button><button class="sec" data-a="d" data-i="${i}">↓</button><button class="sec" data-a="z" data-i="${i}" ${l.layer?'':'disabled'}>Zoom</button>${l.d.kind=='pointcloud'?`<button data-a="3" data-i="${i}">3D</button>`:''}</div></div>`).join('')||'<p class="mu">No datasets.</p>';
+ $('#ll').querySelectorAll('[data-a]').forEach(e=>e['on'+(e.dataset.a=='t'?'change':e.dataset.a=='o'?'input':'click')]=()=>{const i=+e.dataset.i,l=LY[i],a=e.dataset.a;
+  if(a=='t'){l.on=e.checked;apply(l);legend()}else if(a=='o'){l.op=+e.value;apply(l)}else if(a=='z')zoom(l);else if(a=='3')view3d(l.d);else{const j=i+(a=='u'?-1:1);if(j<0||j>=LY.length)return;[LY[i],LY[j]]=[LY[j],LY[i]];LY.forEach(apply);renderLayers()}});legend()}
+function legend(){const sw=(c,t)=>`<div class="ly"><span style="display:inline-block;width:12px;height:12px;background:${c}33;border:2px solid ${c}"></span> ${t}</div>`;
+ const items=LY.filter(l=>l.on&&l.layer).map(l=>{const m=l.d.meta,n=esc(l.d.filename);
+  if(l.d.kind=='dem')return `<div class="ly"><b>${n}</b><div class="grad"></div><div class="lg"><span>${m.stretch[0][0].toFixed(1)}</span><span>elevation</span><span>${m.stretch[0][1].toFixed(1)}</span></div></div>`;
+  if(l.d.kind=='vector')return sw('#e74c3c',`${n} (${m.geometry_type})`);
+  if(l.d.kind=='pointcloud')return sw('#e67e22',`${n} extent`);
+  return `<div class="ly"><b>${n}</b><div class="mu">${m.bands>=3?'RGB composite':'single band'}</div></div>`}).join('');
+ $('#leg').innerHTML=items?'<h4>Legend</h4>'+items:''}
+// ---- 3D point cloud (three.js, simple orbit controls) ----
+async function view3d(d){const m=d.meta,buf=await (await fetch(`/api/datasets/${d.id}/points`)).arrayBuffer(),n=m.preview_points;
+ const pos=new Float32Array(buf,0,n*3),rgb=new Uint8Array(buf,n*12,n*3),col=new Float32Array(n*3);for(let i=0;i<n*3;i++)col[i]=rgb[i]/255;
+ const mo=modal(`<h3>${esc(d.filename)}</h3><p class="mu">${n.toLocaleString()} of ${m.points.toLocaleString()} points shown · drag = rotate, wheel = zoom, right-drag = pan</p><div id="c3" style="height:480px;background:#111;border-radius:4px"></div>`,()=>{cancelAnimationFrame(raf);r.dispose()});
+ const el=$('#c3',mo),W=el.clientWidth,H=480,r=new THREE.WebGLRenderer({antialias:true});r.setSize(W,H);el.appendChild(r.domElement);
+ const sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(50,W/H,.1,1e7),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeBoundingSphere();
+ const R=g.boundingSphere.radius||1;const pts=new THREE.Points(g,new THREE.PointsMaterial({size:2,vertexColors:true,sizeAttenuation:false}));pts.rotation.x=-Math.PI/2;sc.add(pts);
+ let th=.8,ph=1,dist=R*2.5,tg=new THREE.Vector3(),raf;const up=()=>{cam.position.set(tg.x+dist*Math.sin(ph)*Math.cos(th),tg.y+dist*Math.cos(ph),tg.z+dist*Math.sin(ph)*Math.sin(th));cam.lookAt(tg)};
+ let drag=null;r.domElement.oncontextmenu=e=>e.preventDefault();r.domElement.onmousedown=e=>drag={x:e.clientX,y:e.clientY,b:e.button};window.onmouseup=()=>drag=null;
+ r.domElement.onmousemove=e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;if(drag.b==0){th-=dx*.01;ph=Math.min(3.1,Math.max(.05,ph-dy*.01))}else{const s=dist*.002;tg.x-=dx*s*Math.sin(th);tg.z+=dx*s*Math.cos(th);tg.y+=dy*s}};
+ r.domElement.onwheel=e=>{e.preventDefault();dist*=e.deltaY>0?1.1:.9};(function loop(){raf=requestAnimationFrame(loop);up();r.render(sc,cam)})()}
+window.addEventListener('resize',()=>state.map&&state.map.invalidateSize());
+nav('dash');
+</script></body></html>

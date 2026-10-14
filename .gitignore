@@ -1,0 +1,5 @@
+geodash/.venv/
+geodash/data/
+geodash/__pycache__/
+__pycache__/
+*.py[cod]

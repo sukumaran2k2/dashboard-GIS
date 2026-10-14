@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+rasterio
+laspy[lazrs]
+pyshp
+pyproj
+numpy
+pillow
