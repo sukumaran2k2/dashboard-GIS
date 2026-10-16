@@ -2,8 +2,12 @@ fastapi
 uvicorn
 python-multipart
 rasterio
-laspy[lazrs]
-pyshp
+rio-cogeo
+pyogrio
+shapely
 pyproj
+laspy[lazrs]
+trimesh
 numpy
 pillow
+affine

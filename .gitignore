@@ -1,5 +1,14 @@
 geodash/.venv/
 geodash/data/
 geodash/__pycache__/
+geodash/.pytest_cache/
+geodash/.pytest_tmp/
+geodash/.pytest_tmp_data/
+geodash/.stress/
+geodash/.npm-cache/
+geodash/.env.bat
+.npm-cache/
+.tmp/
 __pycache__/
 *.py[cod]
+nul
